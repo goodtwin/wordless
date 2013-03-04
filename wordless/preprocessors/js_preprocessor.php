@@ -13,7 +13,7 @@ require_once "wordless_preprocessor.php";
  * @copyright welaika &copy; 2011 - MIT License
  * @see WordlessPreprocessor
  */
-class SprocketsPreprocessor extends WordlessPreprocessor {
+class JSPreprocessor extends WordlessPreprocessor {
 
   public function __construct() {
     parent::__construct();
@@ -77,7 +77,7 @@ class SprocketsPreprocessor extends WordlessPreprocessor {
     // On cache miss, we build the JS file from scratch
     $pb = new ProcessBuilder(array(
       $this->preference("js.ruby_path"),
-      Wordless::join_paths(dirname(__FILE__), "sprockets_preprocessor.rb"),
+      Wordless::join_paths(dirname(__FILE__), "js_preprocessor.rb"),
       "compile"
     ));
 

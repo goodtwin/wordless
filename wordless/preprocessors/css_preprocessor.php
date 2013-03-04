@@ -15,7 +15,7 @@ require_once "wordless_preprocessor.php";
  * @copyright welaika &copy; 2011 - MIT License
  * @see WordlessPreprocessor
  */
-class CompassPreprocessor extends WordlessPreprocessor {
+class CSSPreprocessor extends WordlessPreprocessor {
 
   public function __construct() {
     parent::__construct();
@@ -90,60 +90,38 @@ class CompassPreprocessor extends WordlessPreprocessor {
     // On cache miss, we build the file from scratch
     $pb = new ProcessBuilder(array(
       $this->preference("css.compass_path"),
-      'compile',
-      $temp_path
+      Wordless::join_paths(dirname(__FILE__), "css_preprocessor.rb"),
+      "compile"
     ));
 
-    $config = array(
-      "http_path" => "./",
-      "http_images_dir" => "../images",
-      "images_dir" => "../assets/images",
-      "http_fonts_dir" => "../fonts",
-      "fonts_dir" => "../assets/fonts",
-      "css_path" => $temp_path,
-      "relative_assets" => false,
-      "output_style" => ":" . $this->preference("css.output_style"),
-      "environment" => ":production",
-      "sass_path" => dirname($file_path)
-    );
+    // Fix for MAMP environments, see http://goo.gl/S5KFe for details
+    $pb->setEnv("DYLD_LIBRARY_PATH", "");
 
-    $ruby_config = array();
+    $pb->add($file_path);
 
-    foreach ($this->preference("css.require_libs") as $lib) {
-      $ruby_config[] = sprintf('require "%s"', $lib);
+    $pb->add("--paths");
+    $pb->add(Wordless::theme_stylesheets_path());
+    #$pb->add(Wordless::theme_javascripts_path());
+
+    if ($this->preference("css.yui_compress")) {
+      $pb->add("--compress");
     }
 
-    foreach ($config as $name => $value) {
-      if (strpos($value, ":") === 0) {
-        $ruby_config[] = sprintf('%s = %s', $name, $value);
-      } else if (is_bool($value)) {
-        $ruby_config[] = sprintf('%s = %s', $name, $value ? "true" : "false");
-      } else {
-        $ruby_config[] = sprintf('%s = "%s"', $name, addcslashes($value, '\\'));
-      }
+    if ($this->preference("css.yui_munge")) {
+      $pb->add("--munge");
     }
-
-    $config_path = tempnam($temp_path, 'compass_config');
-    file_put_contents($config_path, implode("\n", $ruby_config)."\n");
-
-    $pb->add("--config")->add($config_path);
-
-    $output = $temp_path . "/" . basename($file_path, pathinfo($file_path, PATHINFO_EXTENSION)) . 'css';
 
     $proc = $pb->getProcess();
     $code = $proc->run();
 
-    if (0 < $code) {
-      unlink($config_path);
+    if ($code != 0) {
       throw new WordlessCompileException(
-        "Failed to run the following command: " . $proc->getCommandLine() . "\n" .
-        "Generated config:\n" . implode("\n", $ruby_config),
+        "Failed to run the following command: " . $proc->getCommandLine(),
         $proc->getErrorOutput()
       );
     }
 
-    unlink($config_path);
-    return file_get_contents($output);
+    return $proc->getOutput();
   }
 
   /**
