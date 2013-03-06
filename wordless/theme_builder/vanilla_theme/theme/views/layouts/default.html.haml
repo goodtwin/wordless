@@ -6,4 +6,5 @@
       %header.site-header= render_partial("layouts/header")
       %section.site-content= yield()
       %footer.site-footer= render_partial("layouts/footer")
+      = javascript_include_tag("http://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js")
       = javascript_include_tag("application")
