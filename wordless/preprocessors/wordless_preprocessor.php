@@ -93,6 +93,7 @@ class WordlessPreprocessor {
    */
   protected function asset_hash($file_path) {
     // First we get the file's modified date
+    date_default_timezone_set('America/Chicago');
     $hash_seed = date("%U", filemtime($file_path));
 
     // Then we attach the preferences

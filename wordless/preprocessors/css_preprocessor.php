@@ -42,6 +42,7 @@ class CSSPreprocessor extends WordlessPreprocessor {
     sort($files);
     $hash_seed = array();
     foreach ($files as $file) {
+      date_default_timezone_set('America/Chicago');
       $hash_seed[] = $file . date("%U", filemtime($file));
     }
     // Concat original file onto hash seed for uniqueness so each file is unique
