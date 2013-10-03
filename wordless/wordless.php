@@ -68,7 +68,7 @@ class Wordless {
   }
 
   public static function theme_helpers_path() {
-    return self::join_paths(get_template_directory(), 'theme/helpers');
+    return self::join_paths(get_template_directory(), 'config/helpers');
   }
 
   public static function theme_initializers_path() {
@@ -76,7 +76,7 @@ class Wordless {
   }
 
   public static function theme_views_path() {
-    return self::join_paths(get_template_directory(), 'theme/views');
+    return self::join_paths(get_template_directory(), 'views');
   }
 
   public static function theme_url() {
