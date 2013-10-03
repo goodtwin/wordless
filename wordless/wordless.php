@@ -1,31 +1,16 @@
 <?php
 
-require_once Wordless::join_paths(dirname(__FILE__), "admin.php");
-require_once Wordless::join_paths(dirname(__FILE__), "preprocessors.php");
-
 /**
  * Wordless holds all the plugin setup and initialization.
  */
 class Wordless {
 
-  private static $preprocessors = array();
   private static $preferences = array();
   private static $helpers = array();
 
   public static function initialize() {
-    if (Wordless::theme_is_wordless_compatible()){
-        self::load_i18n();
-        self::require_helpers();
-        self::require_theme_initializers();
-        self::register_activation();
-        self::register_preprocessors();
-        self::register_preprocessor_actions();
-    }
-    self::load_admin_page();
-  }
-
-  public static function load_admin_page() {
-    WordlessAdmin::initialize();
+    self::require_helpers();
+    self::require_theme_initializers();
   }
 
   public static function helper($class_name) {
@@ -44,129 +29,6 @@ class Wordless {
     }
   }
 
-  public static function register_preprocessors() {
-    $preprocessors = self::preference("assets.preprocessors", array("JSPreprocessor", "CSSPreprocessor"));
-    foreach ($preprocessors as $preprocessor_class) {
-      self::$preprocessors[] = new $preprocessor_class();
-    }
-  }
-
-  public static function register_activation() {
-    register_activation_hook(__FILE__, array(__CLASS__, 'install') );
-  }
-
-  public static function install() {
-    self::assets_rewrite_rules();
-    flush_rewrite_rules();
-  }
-
-  /**
-   * Register all the actions we need to setup custom rewrite rules
-   */
-  public static function register_preprocessor_actions() {
-    add_action('init', array(__CLASS__, 'assets_rewrite_rules'));
-    add_action('query_vars', array(__CLASS__, 'query_vars'));
-    add_action('parse_request', array(__CLASS__, 'parse_request'));
-  }
-
-  /**
-   * Register some custom query vars we need to handle multiplexing of file preprocessors
-   */
-  public static function query_vars($query_vars) {
-    foreach (self::$preprocessors as $preprocessor) {
-      /* this query_var will be set to true when the requested URL needs this preprocessor */
-      array_push($query_vars, $preprocessor->query_var_name());
-      /* this query_var will be set to the url of the file preprocess */
-      array_push($query_vars, $preprocessor->query_var_name('original_url'));
-    }
-    return $query_vars;
-  }
-
-  /**
-   * For each preprocessor, it creates a new rewrite rule.
-   */
-  public static function assets_rewrite_rules() {
-    foreach (self::$preprocessors as $preprocessor) {
-      add_rewrite_rule('^(.*\.'.$preprocessor->to_extension().')$', 'index.php?'.$preprocessor->query_var_name().'=true&'.$preprocessor->query_var_name('original_url').'=$matches[1]', 'top');
-    }
-  }
-
-  /**
-   * If we get back our custom query vars, then redirect the request to the preprocessor.
-   */
-  public static function parse_request(&$wp) {
-    foreach (self::$preprocessors as $preprocessor) {
-      if (array_key_exists($preprocessor->query_var_name(), $wp->query_vars)) {
-        $original_url = $wp->query_vars[$preprocessor->query_var_name('original_url')];
-        $relative_path = str_replace(preg_replace("/^\//", "", self::theme_url()), '', $original_url);
-        $relative_path = preg_replace("/^.*\/assets\//", "", $relative_path);
-        $to_process_file_path = Wordless::join_paths(self::theme_assets_path(), $relative_path);
-        $to_process_file_path = preg_replace("/\." . $preprocessor->to_extension() . "$/", "", $to_process_file_path);
-        $preprocessor->serve_compiled_file($to_process_file_path, Wordless::theme_temp_path());
-        return;
-      }
-    }
-  }
-
-  public static function compile_assets() {
-    foreach (self::$preprocessors as $preprocessor) {
-      foreach ($preprocessor->supported_extensions() as $extension) {
-        $list_files = self::recursive_glob(self::theme_assets_path(), "*.$extension");
-        foreach ($list_files as $file_path) {
-          // Ignore partials
-          if (!preg_match("/^_/", basename($file_path))) {
-            $compiled_file_path = str_replace(Wordless::theme_assets_path(), '', $file_path);
-            $compiled_file_path = Wordless::join_paths(Wordless::theme_static_assets_path(), $compiled_file_path);
-            $compiled_file_path = preg_replace("/\." . $extension . "$/", ".".$preprocessor->to_extension(), $compiled_file_path);
-
-            try {
-              $to_process_file_path = preg_replace("/\." . $extension . "$/", "", $file_path);
-              $compiled_content = $preprocessor->process_file_with_caching($to_process_file_path, Wordless::theme_temp_path());
-            } catch(WordlessCompileException $e) {
-              echo "Problems compiling $file_path to $compiled_file_path\n\n";
-              echo $e;
-              echo "\n\n";
-            }
-
-            file_put_contents($compiled_file_path, $compiled_content);
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Recursively searches inside a directory for specific files.
-   *
-   * * @param string $directory_path
-   *   The path of the directory to search recursively
-   * * @param string $pattern
-   *   The glob pattern of the files (see http://php.net/manual/en/function.glob.php)
-   * * @param int $flags
-   *   The glob search flags (see http://php.net/manual/en/function.glob.php)
-   *
-   */
-  public static function recursive_glob($path, $pattern = '*', $flags = 0) {
-    $files = glob(self::join_paths($path, $pattern), $flags);
-
-    if (!is_array($files)) {
-      $files = array();
-    }
-
-    $paths = glob(self::join_paths($path, '*'), GLOB_ONLYDIR | GLOB_NOSORT);
-
-    if (!empty($paths)) {
-      foreach ($paths as $sub_path) {
-        $subfiles = self::recursive_glob($sub_path, $pattern, $flags);
-        if (is_array($subfiles)) {
-          $files = array_merge($files, $subfiles);
-        }
-      }
-    }
-
-    return $files;
-  }
-
   /**
    * Set a Wordless preference
    */
@@ -179,13 +41,6 @@ class Wordless {
    */
   public static function preference($name, $default = '') {
     return isset(self::$preferences[$name]) ? self::$preferences[$name] : $default;
-  }
-
-  public static function load_i18n() {
-    $locales_path = self::theme_locales_path();
-    if (file_exists($locales_path) && is_dir($locales_path)) {
-      load_theme_textdomain('we', $locales_path);
-    }
   }
 
   public static function require_helpers() {
@@ -212,45 +67,6 @@ class Wordless {
     }
   }
 
-  /**
-   * Checks for required directories when initializing theme. If any are missing, it will return false.
-   * If passed `true`, this function will return an array of missing directories.
-   *
-   * * @param boolean $return_array
-   *   Set true to get a list of missing directories
-   *
-   */
-  public static function theme_is_wordless_compatible($return_array = false) {
-    // Require wordless_preferences.php in case the user has changed the below paths.
-    $wordless_preferences_path = self::join_paths(self::theme_initializers_path(), "wordless_preferences.php");
-    if(file_exists($wordless_preferences_path)){
-      require_once $wordless_preferences_path;
-    }
-
-    // Scan required directories.
-    $required_directories = array(
-      self::theme_helpers_path(),
-      self::theme_initializers_path(),
-      self::theme_locales_path(),
-      self::theme_views_path(),
-      self::theme_assets_path(),
-      self::theme_stylesheets_path(),
-      self::theme_javascripts_path(),
-      self::theme_temp_path()
-    );
-    $missing_directories = array();
-    foreach ($required_directories as $dir) {
-      if (!file_exists($dir) || !is_dir($dir)) {
-        $missing_directories[] = $dir;
-        if(!$return_array)
-          return false;
-      }
-    }
-    if(!$returnArray)
-      return true;
-    return $missing_directories;
-  }
-
   public static function theme_helpers_path() {
     return self::join_paths(get_template_directory(), 'theme/helpers');
   }
@@ -259,36 +75,8 @@ class Wordless {
     return self::join_paths(get_template_directory(), 'config/initializers');
   }
 
-  public static function theme_locales_path() {
-    return self::join_paths(get_template_directory(), 'config/locales');
-  }
-
   public static function theme_views_path() {
     return self::join_paths(get_template_directory(), 'theme/views');
-  }
-
-  public static function theme_assets_path() {
-    return self::join_paths(get_template_directory(), 'theme/assets');
-  }
-
-  public static function theme_stylesheets_path() {
-    return self::join_paths(get_template_directory(), 'theme/assets/stylesheets');
-  }
-
-  public static function theme_javascripts_path() {
-    return self::join_paths(get_template_directory(), 'theme/assets/javascripts');
-  }
-
-  public static function theme_static_assets_path() {
-    return self::join_paths(get_template_directory(), 'assets');
-  }
-
-  public static function theme_static_javascripts_path() {
-    return self::join_paths(get_template_directory(), 'assets/javascripts');
-  }
-
-  public static function theme_temp_path() {
-    return self::preference("theme.temp_dir", self::join_paths(get_template_directory(), 'tmp'));
   }
 
   public static function theme_url() {
@@ -315,5 +103,3 @@ class Wordless {
   }
 
 }
-
-
